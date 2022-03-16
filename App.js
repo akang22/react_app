@@ -1,7 +1,21 @@
 import * as React from 'react';
-import { Text, View, StyleSheet, Image } from 'react-native';
+import { Text, View, StyleSheet, Image, FlatList, Dimensions, Button } from 'react-native';
+import { createAppContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
-class App extends React.Component {
+const TabNavigator = createBottomTabNavigator();
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Tab.Navigator>
+        <Tab.Screen name="Home" component={HomeScreen} />
+        <Tab.Screen name="Settings" component={SettingsScreen} />
+      </Tab.Navigator>
+    </NavigationContainer>
+  );
+}
+
+class TabOne extends React.Component {
   // Constructor
   constructor(props) {
     super(props);
@@ -14,76 +28,118 @@ class App extends React.Component {
 
   // ComponentDidMount is used to
   // execute the code
-  componentDidMount() {
-    fetch('https://jsonplaceholder.typicode.com/photos')
-      .then((res) => res.json())
-      .then((json) => {
-        this.setState({
-          items: json,
-          DataisLoaded: true,
-        });
+  async componentDidMount() {
+    const getBase64FromUrl = async (url) => {
+      const data = await fetch(url);
+      const blob = await data.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob); 
+        reader.onloadend = () => {
+          const base64data = reader.result;   
+          resolve(base64data);
+        }
       });
+    }
+
+    let json = await (await fetch('https://jsonplaceholder.typicode.com/photos')).json()
+    const vals = {};
+    json = json.slice(0, 50)
+    // cache list of b64 images
+    await Promise.all(json.map(async function a(element) {
+      if (!(element.url in vals)) {
+        vals[element.url] = await getBase64FromUrl(element.url)
+      }
+    }));
+    this.setState({
+      items: {"json":json, "vals": vals},
+      DataisLoaded: true,
+    });
   }
 
-  render() {
-    const { DataisLoaded, items } = this.state;
-    if (!DataisLoaded) return <View></View>;
+  renderTabOne() {
+    let { DataisLoaded, items } = this.state;
+    if (!DataisLoaded) return <Text style={{left: 60, top: 60}}>Loading...</Text>;
+    let images = items["json"]
+    let vals = items["vals"]
+
+    const screen = Dimensions.get("screen");
 
     const style = StyleSheet.create({
-      horizontal_scroll: {
-        overflow: 'auto',
-        whiteSpace: 'nowrap',
-      },
       photo_container: {
-        display: 'inline-block',
-        backgroundColor: 'grey',
-        border: '10px',
-        borderColor: 'black',
-        borderStyle: 'solid',
-        padding: '20px',
-        borderRadius: '30px',
-        width: '50vw',
-        height: '100vh',
-        margin: '5vh',
-        filter: 'drop-shadow(0 -6mm 4mm rgb(160, 0, 210))',
-      },
-      photo_image: {
-        width: '100%',
-        maxHeight: '100%',
-        position: 'relative',
-        top: '0px',
-        zIndex: '1',
-        elevation: '1'
+        width: 0.6 * screen.width,
+        height: 0.8 * screen.width,
+        margin: 0.05 * screen.width,
+        borderRadius: 10,
+        elevation: 10,
+        top: 80,
+        shadowColor: '#000',
+        backgroundColor : "#FFFFFF"
       },
       photo_name: {
-        transform: 'rotate(45deg)',
-        width: 'auto',
-        height: '1em',
-        fontSize: '2.5vw',
-        margin: '0',
-        top: '25vw',
-        position: 'absolute',
-        zIndex: '2',
-        elevation: '2'
+        transform: [{rotate: '45deg'}],
+        width: 0.7 * screen.width,
+        height: 'auto',
+        fontSize: 8,
+        top: 0.25 * screen.width,
+        position: 'relative',
+        elevation: 30
+      },
+      photo_image: {
+        borderRadius: 10,
+        borderWidth: 2,
+        top: -12,
+        borderColor: 'black',
+        height: 0.6 * screen.width,
+        width: 0.6 * screen.width,
+        position: 'relative',
       },
     });
 
-    return (
-      <View className="App">
-        <Text>Tab 1</Text>
-        <View style={style.horizontal_scroll}>
-          {items.map((item) => (
-            <View style={style.photo_container}>
+    const shuffleOrder = (start, arr) => {
+      if (start == arr.length) {
+        return arr;
+      } else {
+        const rand = Math.floor(Math.random() * (arr.length - start) ) + start;
+        const temp = arr[rand];
+        arr[rand] = arr[start]
+        arr[start] = temp;
+        return shuffleOrder(start + 1, arr)
+      }
+    }
+    const shufflePhotos = () => {
+      this.setState({
+        "json": shuffleOrder(0, images), "vals": vals, "tab": tab
+      })
+    }
+
+    const renderPhoto = ({ item }) => {
+      if (item.url in vals) {
+        return (
+      <View style={[style.photo_container, style.shadowProp]}>
+        <Text style={style.photo_name}>{item.title}</Text>
+        <Image
+          source={{ uri: vals[item.url] }}
+          style={style.photo_image}></Image>
+      </View>
+    );
+        } else {
+          return (
+            <View style={[style.photo_container, style.shadowProp]}>
               <Text style={style.photo_name}>{item.title}</Text>
               <Image
-                source={{ uri: 'https://via.placeholder.com/600/92c952' }}
+                source={{ uri: item.url }}
                 style={style.photo_image}></Image>
             </View>
-          ))}
-        </View>
+          );
+        }};
+
+    return (
+      <View className="App" style={{display: "flex"}}>
+        <Text style={{left: 60, top: 60}}>Tab 1</Text>
+        <FlatList horizontal={true} data={images} renderItem={renderPhoto}/>
+        <View style={{position: "relative", top:50}}><Button onPress={shufflePhotos} title='Shuffle Photos'></Button></View>
       </View>
     );
   }
 }
-
-export default App;
